@@ -1,0 +1,103 @@
+from matplotlib import pyplot as plot
+from sklearn import preprocessing, metrics
+from sklearn.model_selection import train_test_split
+import pandas as pd
+import sqlite3
+import numpy as np
+from sqlalchemy import create_engine
+from sklearn.neighbors import KNeighborsClassifier
+from basketball_reference_scraper.teams import get_team_misc, get_roster
+#engine = create_engine('sqlite://', echo=False)
+connect = sqlite3.connect("aquarium.db")
+cursor = connect.cursor()
+#cursor.execute("CREATE TABLE misc_stats(W INTEGER, L INTEGER, MOV INTEGER, SOS INTEGER, SRS INTEGER, ORtg INTEGER, DRtg INTEGER, Pace INTEGER, FTr INTEGER, 3Pr INTEGER, eFG% INTEGER, TOV% INTEGER,  ORB% INTEGER, FT/FGA INTEGER, eFG% INTEGER, TOV% INTEGER, DRB% INTEGER, FT/FGA INTEGER")
+
+teams = ["SAS", "GSW", "MEM", "ATL", "BOS", "CLE", "CHI", "LAC", "CHH", "DAL", "DEN", "DET", "HOU", "LAL", "IND","MIN", "MIL", "MIA","NYK", "NOP","OKC","PHI", "ORL", "POR", "SAC", "TOR", "BRK","UTA", "PHO", "WAS"]
+champs = {2020:"LAL", 2019: "TOR", 2018: "GSW", 2017: "GSW", 2016: "CLE", 2015: "GSW", 2014: "SAS", 2013: "MIA", 2012: "MIA", 2011: "DAL",2010: "LAL" }
+x = list()
+start_year = 2016
+length = 4
+counter = 0
+for i in range(30):
+	for j in range(length):
+		year = start_year + j
+		team = teams[i]
+		X = get_team_misc(team, year)
+		data = dict()
+		X = X[~X.index.duplicated()]
+		X = X.drop(labels=["ATTENDANCE", "ATTENDANCE/G", "TEAM", "SEASON", "PW", "PL", "ARENA"])
+		columns = X.index
+		for w in range(X.shape[0]):
+			data[columns[w]] = X[columns[w]]
+		df = pd.DataFrame(data, [counter])
+		x.append(df)
+		fullX = pd.concat(x)
+		print("team" + team + "  " + str(year))
+		counter+=1
+xInArray = fullX[columns].values.astype(float)
+fullX.to_sql('misc_stats', connect)
+finalX = preprocessing.StandardScaler().fit(xInArray).transform(xInArray)
+teamCounter = 0
+thisYear = 0
+yearCounter = 0
+thisTeam = 0
+y = list()
+for o in range(fullX.shape[0]):
+	if(teamCounter < 30):
+		thisYear = start_year + yearCounter
+		thisTeam = teams[teamCounter]
+		if (champs[thisYear] == thisTeam):
+			y.insert(o, 0)
+		else:
+			y.insert(o, 1)
+
+		if(thisYear != start_year + length - 1):
+			yearCounter+=1
+		else:
+			teamCounter+=1
+			yearCounter = 0
+finalY = np.array(y)
+
+#X_train, X_test, y_train, y_test = train_test_split( finalX, finalY, test_size=0.2, random_state=4)
+
+neighbours = KNeighborsClassifier(4).fit(finalX, finalY)
+
+# yhat = neighbours.predict(get_team_misc("MIA", 2014))
+# print(yhat)
+# print(y_test)
+
+# print( "accuracy" + str(metrics.accuracy_score(y_test, yhat)))
+
+X = get_team_misc("MIA", 2012)
+data = dict()
+X = X[~X.index.duplicated()]
+X = X.drop(labels=["ATTENDANCE", "ATTENDANCE/G", "TEAM", "SEASON", "PW", "PL", "ARENA"])
+columns = X.index
+for w in range(X.shape[0]):
+	data[columns[w]] = X[columns[w]]
+df = pd.DataFrame(data, [0]).values
+
+print(neighbours.predict(df))
+
+## the sql db works now but obvs un organized af,
+# should prob store the teams and names in db as well, then just select int columns
+# the model does predict yes and no, but should test it more 
+
+
+
+# would obviously want to rename colums with this
+# then merge with others , maybe rename at the end
+# can then add in how many playoff wins, although to make it simpler our y could just be ring or none
+
+
+# y = range(20);
+# x1 = list(map(float, x['PTS']))
+# y1 = list(map(float, x['AST']))
+# sort = false
+# count = 0
+# plot.scatter(x1,y1)
+
+# plot.show()
+
+
+connect.close()
